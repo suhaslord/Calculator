@@ -1,0 +1,66 @@
+name: Podiom Go 1.26 verification
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.26
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+      - name: Verify Go version
+        run: go version
+      - name: Check out Podiom
+        run: git clone --depth 1 https://github.com/Podiom/Podiom.git podiom
+      - name: Add parseFrontmatter tests
+        working-directory: podiom
+        shell: bash
+        run: |
+          cat > internal/skills/scan_test.go <<'EOF'
+          package skills
+
+          import "testing"
+
+          func TestParseFrontmatter(t *testing.T) {
+          	tests := []struct {
+          		name     string
+          		body     string
+          		wantName string
+          		wantDesc string
+          	}{
+          		{name: "no frontmatter", body: "# Skill\n\nNo metadata here."},
+          		{name: "well formed", body: "---\nname: example\ndescription: useful skill\n---\n\n# Example", wantName: "example", wantDesc: "useful skill"},
+          		{name: "utf8 bom", body: "\ufeff---\nname: bom-skill\ndescription: parses after BOM\n---\n", wantName: "bom-skill", wantDesc: "parses after BOM"},
+          		{name: "leading whitespace", body: "  \n\t---\nname: spaced\ndescription: leading whitespace is ignored\n---\n", wantName: "spaced", wantDesc: "leading whitespace is ignored"},
+          		{name: "unterminated frontmatter", body: "---\nname: unfinished\ndescription: missing closing delimiter\n"},
+          		{name: "malformed yaml", body: "---\nname: [unterminated\n---\n"},
+          		{name: "name only", body: "---\nname: only-name\n---\n", wantName: "only-name"},
+          		{name: "description only", body: "---\ndescription: only description\n---\n", wantDesc: "only description"},
+          		{name: "trim values", body: "---\nname: '  padded-name  '\ndescription: '  padded description  '\n---\n", wantName: "padded-name", wantDesc: "padded description"},
+          	}
+
+          	for _, tt := range tests {
+          		t.Run(tt.name, func(t *testing.T) {
+          			gotName, gotDesc := parseFrontmatter(tt.body)
+          			if gotName != tt.wantName || gotDesc != tt.wantDesc {
+          				t.Fatalf("parseFrontmatter() = (%q, %q), want (%q, %q)", gotName, gotDesc, tt.wantName, tt.wantDesc)
+          			}
+          		})
+          	}
+          }
+          EOF
+          gofmt -w internal/skills/scan_test.go
+          git diff --check
+      - name: Run focused test
+        working-directory: podiom
+        run: go test ./internal/skills/... -run TestParseFrontmatter -v
+      - name: Run skills package tests
+        working-directory: podiom
+        run: go test ./internal/skills/...
