@@ -6,7 +6,7 @@ OUT = Path('yoshii_web_macos')
 OUT.mkdir(exist_ok=True)
 PROMPT1 = 'You are tutoring a student. The student says: 1/3 + 1/4 = 2/7'
 PROMPT2 = 'I added the tops because they are parts, and I added the bottoms because they are the number of pieces.'
-URL = 'https://copilot.microsoft.com/'
+URL = 'https://www.bing.com/chat'
 
 SIGNIN_WORDS = ['sign in', 'email, phone, or skype', 'choose a microsoft account']
 
@@ -64,7 +64,6 @@ def submit(page, text):
     except Exception:
         page.keyboard.type(text)
     before=(comp.input_value() if comp.evaluate("el => 'value' in el") else comp.inner_text()).strip()
-    # Prefer a visible submit/send button, then Enter.
     clicked=False
     for pattern in ['Send','Submit','Send message']:
         btn=page.get_by_role('button', name=pattern)
@@ -119,7 +118,6 @@ with sync_playwright() as p:
                 body1=wait_response(page,f'{browser_name}_turn1',before['body'])
                 rec['prompt1_value']=p1
                 rec['turn1_body']=body1
-                # A valid turn must add content beyond the submitted prompt and must not turn into a sign-in page.
                 if len(body1) <= len(before['body'])+len(PROMPT1)+30 or ('email, phone, or skype' in body1.lower()):
                     rec['status']='invalid_turn1'
                 else:
