@@ -15,21 +15,29 @@ jobs:
       - name: Inspect Copilot app availability
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           Write-Host '=== winget ==='
           winget --version
-          Write-Host '=== winget search Copilot ==='
-          winget search --name "Microsoft Copilot" --accept-source-agreements 2>&1 | Tee-Object -FilePath copilot-winget.txt
+          Write-Host '=== all sources: Copilot ==='
+          (winget search Copilot --accept-source-agreements 2>&1 | Out-String) | Tee-Object -FilePath copilot-winget-all.txt
+          Write-Host '=== Microsoft Store: Copilot ==='
+          (winget search Copilot --source msstore --accept-source-agreements 2>&1 | Out-String) | Tee-Object -FilePath copilot-winget-store.txt
+          Write-Host '=== winget source list ==='
+          (winget source list 2>&1 | Out-String) | Tee-Object -FilePath winget-sources.txt
           Write-Host '=== Installed AppX Copilot candidates ==='
-          Get-AppxPackage -AllUsers *Copilot* | Format-List Name,PackageFullName,InstallLocation,PackageFamilyName | Tee-Object -FilePath copilot-appx.txt
+          (Get-AppxPackage -AllUsers *Copilot* | Format-List Name,PackageFullName,InstallLocation,PackageFamilyName | Out-String) | Tee-Object -FilePath copilot-appx.txt
           Write-Host '=== Start menu Copilot candidates ==='
-          Get-StartApps | Where-Object { $_.Name -match 'Copilot' } | Format-List | Tee-Object -FilePath copilot-startapps.txt
+          (Get-StartApps | Where-Object { $_.Name -match 'Copilot' } | Format-List | Out-String) | Tee-Object -FilePath copilot-startapps.txt
+          exit 0
       - name: Upload probe
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: yoshii-windows-copilot-app-probe
           path: |
-            copilot-winget.txt
+            copilot-winget-all.txt
+            copilot-winget-store.txt
+            winget-sources.txt
             copilot-appx.txt
             copilot-startapps.txt
           if-no-files-found: warn
