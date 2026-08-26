@@ -1,4 +1,4 @@
-name: Yoshii Headed Copilot x64 Probe
+name: Yoshii x64 Consumer Copilot Store Probe
 
 on:
   push:
@@ -9,23 +9,41 @@ on:
 jobs:
   probe:
     runs-on: windows-2025
-    timeout-minutes: 15
+    timeout-minutes: 18
+    env:
+      CASE_ID: C2
+      CONDITION: generic
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install headed browser controller
+      - name: Install official Windows App Installer
         shell: pwsh
         run: |
-          pip install playwright
-          python -m playwright install chromium
-      - name: Probe signed-out Copilot in headed Chromium
-        run: python tools/yoshii_edge_headed_probe.py
-      - name: Upload evidence
+          Invoke-WebRequest -Uri https://aka.ms/getwinget -OutFile $env:RUNNER_TEMP\winget.msixbundle
+          Add-AppxPackage -Path $env:RUNNER_TEMP\winget.msixbundle
+          $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
+          if (-not (Test-Path $winget)) { throw 'winget.exe not installed' }
+          & $winget --info
+      - name: Install x64 Microsoft Copilot from Store
+        shell: pwsh
+        run: |
+          $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
+          & $winget install --id 9NHT9RB2F4HD --source msstore --architecture x64 --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw "Copilot Store x64 install failed: $LASTEXITCODE" }
+          $pkg = Get-AppxPackage Microsoft.Copilot
+          if (-not $pkg) { throw 'Microsoft.Copilot package missing after x64 Store install' }
+          $pkg | Select-Object Name,PackageFullName,Version,Architecture,InstallLocation | Format-List
+          if ($pkg.Version -le [version]'1.25121.84.0') { throw "STALE_COPILOT_PACKAGE_$($pkg.Version)" }
+      - name: Install Windows UI automation
+        run: pip install pywinauto
+      - name: Run real C2 Copilot calibration
+        run: python tools/yoshii_copilot_submitfix.py
+      - name: Upload raw evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yoshii-headed-x64-C2-probe
-          path: yoshii_edge_probe/
+          name: yoshii-x64-store-C2-generic
+          path: yoshii_result/
           if-no-files-found: warn
