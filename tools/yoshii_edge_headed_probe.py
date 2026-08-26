@@ -66,16 +66,18 @@ def wait_change(page, prior, timeout=90):
         if changed and stable>=2: break
     return latest
 
-if not EDGE_PATH or not Path(EDGE_PATH).exists():
-    raise RuntimeError(f'EDGE_PATH missing or invalid: {EDGE_PATH!r}')
-
 with sync_playwright() as p:
-    browser=p.chromium.launch(executable_path=EDGE_PATH, headless=False, args=['--no-first-run','--no-default-browser-check'])
+    if EDGE_PATH and Path(EDGE_PATH).exists():
+        browser=p.chromium.launch(executable_path=EDGE_PATH, headless=False, args=['--no-first-run','--no-default-browser-check'])
+        browser_source='resolved_edge'
+    else:
+        browser=p.chromium.launch(headless=False, args=['--no-first-run','--no-default-browser-check'])
+        browser_source='playwright_chromium'
     context=browser.new_context(viewport={'width':1440,'height':1000}, locale='en-US', timezone_id='America/Los_Angeles')
     results=[]
     for ui,url in enumerate(URLS):
         page=context.new_page()
-        rec={'url_requested':url,'edge_path':EDGE_PATH}
+        rec={'url_requested':url,'edge_path':EDGE_PATH,'browser_source':browser_source}
         try:
             page.goto(url, wait_until='domcontentloaded', timeout=120000)
             page.wait_for_timeout(10000)
@@ -104,5 +106,5 @@ with sync_playwright() as p:
             rec['status']='error'; rec['error']=repr(e)
         results.append(rec); page.close()
     (OUT/'record.json').write_text(json.dumps(results,indent=2,ensure_ascii=False),encoding='utf-8')
-    for r in results: print('EDGE_COPILOT',r.get('url_requested'),r.get('url_landed'),r.get('status'),r.get('error'))
+    for r in results: print('EDGE_COPILOT',r.get('browser_source'),r.get('url_requested'),r.get('url_landed'),r.get('status'),r.get('error'))
     context.close(); browser.close()
