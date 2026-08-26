@@ -1,0 +1,31 @@
+name: Yoshii Copilot Direct Browser Run
+
+on:
+  push:
+    branches:
+      - automation/yoshii-copilot
+  workflow_dispatch:
+
+jobs:
+  copilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Run Copilot diagnostic
+        run: python tools/copilot_diag.py
+      - name: Upload diagnostic artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoshii-copilot-diagnostic
+          path: copilot_artifacts/
+          if-no-files-found: warn
