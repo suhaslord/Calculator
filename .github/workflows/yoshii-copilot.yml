@@ -8,8 +8,8 @@ on:
 
 jobs:
   copilot:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: macos-15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,7 +19,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install playwright
-          python -m playwright install --with-deps chromium
+          python -m playwright install chromium
       - name: Run Copilot diagnostic
         run: python tools/copilot_diag.py
       - name: Upload diagnostic artifacts
