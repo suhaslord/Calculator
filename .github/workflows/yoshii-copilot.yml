@@ -9,21 +9,27 @@ on:
 jobs:
   copilot:
     runs-on: windows-11-arm
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect Windows and Store tooling
+      - name: Bootstrap official Windows App Installer
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path copilot_artifacts | Out-Null
           Get-ComputerInfo | Select-Object WindowsProductName,WindowsVersion,OsBuildNumber | Format-List | Tee-Object copilot_artifacts/windows.txt
-          winget --version | Tee-Object copilot_artifacts/winget.txt
-          winget search --id 9NHT9RB2F4HD --source msstore --accept-source-agreements | Tee-Object copilot_artifacts/search.txt
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Invoke-WebRequest -Uri 'https://aka.ms/getwinget' -OutFile "$env:TEMP\Microsoft.DesktopAppInstaller.msixbundle"
+            Add-AppxPackage -Path "$env:TEMP\Microsoft.DesktopAppInstaller.msixbundle"
+          }
+          $winget=(Get-Command winget -ErrorAction Stop).Source
+          & $winget --version | Tee-Object copilot_artifacts/winget.txt
+          & $winget search --id 9NHT9RB2F4HD --source msstore --accept-source-agreements | Tee-Object copilot_artifacts/search.txt
       - name: Install official Microsoft Copilot app
         shell: pwsh
         continue-on-error: true
         run: |
-          winget install --id 9NHT9RB2F4HD --source msstore --accept-source-agreements --accept-package-agreements --silent --disable-interactivity | Tee-Object copilot_artifacts/install.txt
+          $winget=(Get-Command winget -ErrorAction Stop).Source
+          & $winget install --id 9NHT9RB2F4HD --source msstore --accept-source-agreements --accept-package-agreements --silent --disable-interactivity | Tee-Object copilot_artifacts/install.txt
           Get-AppxPackage | Where-Object { $_.Name -match 'Copilot' -or $_.PackageFamilyName -match 'Copilot' } | Select-Object Name,PackageFullName,PackageFamilyName,InstallLocation | Format-List | Tee-Object copilot_artifacts/packages.txt
       - name: Inspect launch registration
         shell: pwsh
