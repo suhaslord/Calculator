@@ -21,7 +21,7 @@ jobs:
           winget install --id 9WZDNCRD29V9 --source msstore --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
           Get-AppxPackage *MicrosoftOfficeHub* | Select-Object Name,PackageFullName,Version | Format-List
       - name: Install UI automation
-        run: pip install pywinauto
+        run: pip install pywinauto pillow
       - name: Probe real unified Copilot UI
         run: python tools/yoshii_unified_probe.py
       - name: Upload evidence
