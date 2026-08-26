@@ -26,12 +26,12 @@ jobs:
           $winget = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe" -ErrorAction SilentlyContinue
           if (-not $winget) { throw 'winget.exe not installed' }
           & $winget.FullName --info
-      - name: Install standalone consumer Microsoft Copilot
+      - name: Install x64 standalone consumer Microsoft Copilot
         shell: pwsh
         run: |
           $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
-          & $winget install --id 9NHT9RB2F4HD --source msstore --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
-          if ($LASTEXITCODE -ne 0) { throw "Copilot Store install failed: $LASTEXITCODE" }
+          & $winget install --id 9NHT9RB2F4HD --source msstore --architecture x64 --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw "Copilot Store x64 install failed: $LASTEXITCODE" }
           Get-AppxPackage *Copilot* | Select-Object Name,PackageFullName,Version,Architecture | Format-List
       - name: Install Windows UI automation
         run: pip install pywinauto
@@ -41,6 +41,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yoshii-win11-consumer-C2-generic
+          name: yoshii-win11-consumer-C2-generic-x64
           path: yoshii_result/
           if-no-files-found: warn
