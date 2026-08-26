@@ -1,0 +1,34 @@
+name: Yoshii Consumer Copilot App
+
+on:
+  push:
+    branches:
+      - automation/yoshii-copilot
+  workflow_dispatch:
+
+jobs:
+  consumer-app:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Microsoft Copilot app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Continue'
+          winget install --id 9NHT9RB2F4HD --source msstore --accept-source-agreements --accept-package-agreements --silent --disable-interactivity 2>&1 | Tee-Object -FilePath copilot-install.txt
+          Write-Host '=== packages ==='
+          Get-AppxPackage *Microsoft.Copilot* | Format-List Name,PackageFullName,PackageFamilyName,InstallLocation,Version | Tee-Object -FilePath copilot-package.txt
+          Write-Host '=== start apps ==='
+          Get-StartApps | Where-Object {$_.Name -match 'Copilot'} | Format-List | Tee-Object -FilePath copilot-startapps.txt
+          exit 0
+      - name: Upload installation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoshii-consumer-copilot-install
+          path: |
+            copilot-install.txt
+            copilot-package.txt
+            copilot-startapps.txt
+          if-no-files-found: warn
