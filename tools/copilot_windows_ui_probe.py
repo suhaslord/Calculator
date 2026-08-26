@@ -11,10 +11,17 @@ desktop=Desktop(backend='uia')
 def copilot_window():
     for w in desktop.windows():
         try:
-            if 'copilot' in w.window_text().lower():
-                return w
-        except Exception:
-            pass
+            if 'copilot' in w.window_text().lower(): return w
+        except Exception: pass
+    return None
+
+def find_button(w, text=None, aid=None):
+    for c in w.descendants():
+        try:
+            if c.element_info.control_type!='Button': continue
+            if aid and c.element_info.automation_id==aid: return c
+            if text and c.window_text().strip().lower()==text.lower(): return c
+        except Exception: pass
     return None
 
 def dump(tag,w):
@@ -26,40 +33,28 @@ def dump(tag,w):
             rec['children'].append(info)
             if info['text'] or info['control_type'] in ('Edit','Document','Button','Hyperlink'):
                 print(' CHILD',json.dumps(info,ensure_ascii=False))
-        except Exception:
-            pass
+        except Exception: pass
     (OUT/f'{tag}_uia.json').write_text(json.dumps(rec,indent=2,ensure_ascii=False),encoding='utf-8')
     return rec
 
-w=copilot_window()
-if not w:
-    raise RuntimeError('Copilot window not found after launch')
+w=copilot_window();
+if not w: raise RuntimeError('Copilot window not found')
 dump('onboarding',w)
+skip=find_button(w,aid='SkipToHomeButton') or find_button(w,text='Skip')
+if not skip: raise RuntimeError('Skip button not found')
+print('CLICK_SKIP'); skip.click_input(); time.sleep(8)
+w=copilot_window(); mid=dump('post_skip',w)
 
-# Follow the app's ordinary signed-out path.
-skip=None
-for c in w.descendants():
-    try:
-        if c.element_info.control_type=='Button' and (c.window_text().strip().lower()=='skip' or c.element_info.automation_id=='SkipToHomeButton'):
-            skip=c; break
-    except Exception:
-        pass
-if not skip:
-    raise RuntimeError('Normal onboarding Skip button was not found')
-print('CLICKING_SKIP',skip.window_text(),skip.element_info.automation_id)
-skip.click_input()
-time.sleep(12)
+go=find_button(w,aid='GoToHomeButton') or find_button(w,text='Go to Home')
+if go:
+    print('CLICK_GO_HOME'); go.click_input(); time.sleep(12)
+else:
+    print('NO_GO_HOME_BUTTON')
+w=copilot_window(); final=dump('final_home',w)
 
-w=copilot_window()
-if not w:
-    raise RuntimeError('Copilot window disappeared after Skip')
-home=dump('home_signed_out',w)
-
-# Summarize likely controls for the next full-run script.
 interesting=[]
-for x in home['children']:
+for x in final['children']:
     text=(x.get('text') or '').lower(); aid=(x.get('automation_id') or '').lower(); ct=x.get('control_type')
-    if ct in ('Edit','Document') or any(k in text or k in aid for k in ['message','ask','prompt','chat','new','send','home']):
-        interesting.append(x)
+    if ct in ('Edit','Document') or any(k in text or k in aid for k in ['message','ask','prompt','chat','new','send','type','home']): interesting.append(x)
 print('INTERESTING',json.dumps(interesting,indent=2,ensure_ascii=False))
 (OUT/'interesting_controls.json').write_text(json.dumps(interesting,indent=2,ensure_ascii=False),encoding='utf-8')
