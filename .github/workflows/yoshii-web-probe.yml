@@ -1,0 +1,30 @@
+name: Yoshii Free Copilot Web Probe
+
+on:
+  push:
+    branches:
+      - automation/yoshii-copilot-web
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install browser automation
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium firefox
+      - name: Probe free Microsoft Copilot web
+        run: python tools/yoshii_web_probe.py
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoshii-free-copilot-web-probe
+          path: yoshii_web_probe/
+          if-no-files-found: warn
