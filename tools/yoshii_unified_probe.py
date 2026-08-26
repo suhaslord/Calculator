@@ -1,6 +1,7 @@
 import json, subprocess, time
 from pathlib import Path
 from pywinauto import Desktop, keyboard
+from PIL import ImageGrab
 
 OUT = Path('yoshii_unified_probe')
 OUT.mkdir(exist_ok=True)
@@ -10,6 +11,12 @@ PROMPT = 'You are tutoring a student. The student says: 1/3 + 1/4 = 2/7'
 subprocess.Popen(['explorer.exe', f'shell:AppsFolder\\{APPID}'])
 time.sleep(20)
 desktop = Desktop(backend='uia')
+
+def shot(tag):
+    img = ImageGrab.grab(all_screens=True)
+    p = OUT / f'{tag}.png'
+    img.save(p)
+    print('SCREENSHOT', p, img.size)
 
 def get_windows():
     rows=[]
@@ -63,10 +70,12 @@ def snapshot(tag):
                 print(json.dumps(e,ensure_ascii=False))
     return allrows
 
+shot('before')
 before=snapshot('before')
 edit=None
 for w in candidate_windows():
     try:
+        w.set_focus()
         for c in w.descendants():
             if c.element_info.control_type=='Edit' and c.is_visible() and c.is_enabled():
                 edit=c; break
@@ -83,9 +92,21 @@ if edit:
         keyboard.send_keys('^a'); keyboard.send_keys(PROMPT,with_spaces=True)
     keyboard.send_keys('{ENTER}')
     time.sleep(25)
+    shot('after_prompt')
     record['after']=snapshot('after_prompt')
 else:
     record['before']=before
+    # capture a keyboard-navigation trace for the embedded browser surface
+    w = candidate_windows()[0] if candidate_windows() else None
+    if w is not None:
+        try:
+            w.set_focus()
+        except Exception:
+            pass
+        for i in range(12):
+            keyboard.send_keys('{TAB}')
+            time.sleep(0.3)
+        shot('after_tabs')
 
 (OUT/'record.json').write_text(json.dumps(record,indent=2,ensure_ascii=False),encoding='utf-8')
 print('DONE',json.dumps({'input_found':bool(edit)}))
