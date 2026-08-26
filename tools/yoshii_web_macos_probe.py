@@ -6,7 +6,7 @@ OUT = Path('yoshii_web_macos')
 OUT.mkdir(exist_ok=True)
 PROMPT1 = 'You are tutoring a student. The student says: 1/3 + 1/4 = 2/7'
 PROMPT2 = 'I added the tops because they are parts, and I added the bottoms because they are the number of pieces.'
-URL = 'https://www.bing.com/chat'
+URL = 'https://copilot.ai/'
 
 SIGNIN_WORDS = ['sign in', 'email, phone, or skype', 'choose a microsoft account']
 
