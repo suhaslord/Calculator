@@ -1,4 +1,4 @@
-name: Yoshii Free Copilot Web Probe
+name: Yoshii Signed-Out Copilot macOS Probe
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   probe:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
@@ -18,13 +18,13 @@ jobs:
       - name: Install browser automation
         run: |
           pip install playwright
-          python -m playwright install --with-deps chromium firefox
-      - name: Probe free Microsoft Copilot web
-        run: python tools/yoshii_web_probe.py
+          python -m playwright install chromium webkit
+      - name: Probe free signed-out Microsoft Copilot
+        run: python tools/yoshii_web_macos_probe.py
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yoshii-free-copilot-web-probe
-          path: yoshii_web_probe/
+          name: yoshii-signed-out-copilot-macos-C2
+          path: yoshii_web_macos/
           if-no-files-found: warn
