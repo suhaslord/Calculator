@@ -1,0 +1,35 @@
+name: Yoshii Windows Copilot App Probe
+
+on:
+  push:
+    branches:
+      - automation/yoshii-copilot
+  workflow_dispatch:
+
+jobs:
+  app-probe:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect Copilot app availability
+        shell: pwsh
+        run: |
+          Write-Host '=== winget ==='
+          winget --version
+          Write-Host '=== winget search Copilot ==='
+          winget search --name "Microsoft Copilot" --accept-source-agreements 2>&1 | Tee-Object -FilePath copilot-winget.txt
+          Write-Host '=== Installed AppX Copilot candidates ==='
+          Get-AppxPackage -AllUsers *Copilot* | Format-List Name,PackageFullName,InstallLocation,PackageFamilyName | Tee-Object -FilePath copilot-appx.txt
+          Write-Host '=== Start menu Copilot candidates ==='
+          Get-StartApps | Where-Object { $_.Name -match 'Copilot' } | Format-List | Tee-Object -FilePath copilot-startapps.txt
+      - name: Upload probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoshii-windows-copilot-app-probe
+          path: |
+            copilot-winget.txt
+            copilot-appx.txt
+            copilot-startapps.txt
+          if-no-files-found: warn
