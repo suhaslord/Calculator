@@ -9,7 +9,7 @@ on:
 jobs:
   probe:
     runs-on: windows-2025
-    timeout-minutes: 18
+    timeout-minutes: 20
     env:
       CASE_ID: C2
       CONDITION: generic
@@ -18,6 +18,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install Microsoft Windows App Runtime 1.8
+        shell: pwsh
+        run: |
+          $runtime = "$env:RUNNER_TEMP\WindowsAppRuntimeInstall-x64.exe"
+          Invoke-WebRequest -Uri https://download.microsoft.com/download/11c5f368-18ed-4bc7-9421-a876b9923460/WindowsAppRuntimeInstall-x64.exe -OutFile $runtime
+          (Get-Item $runtime).VersionInfo | Format-List ProductVersion,FileVersion,CompanyName,FileName
+          $p = Start-Process -FilePath $runtime -ArgumentList '--quiet' -PassThru -Wait
+          Write-Host "Windows App Runtime exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { throw "Windows App Runtime install failed: $($p.ExitCode)" }
+          Get-AppxPackage *WindowsAppRuntime* | Select-Object Name,Version,Architecture,PackageFullName | Format-Table -AutoSize
       - name: Install official Windows App Installer
         shell: pwsh
         run: |
