@@ -19,7 +19,6 @@ jobs:
         shell: pwsh
         run: |
           winget install --id 9WZDNCRD29V9 --source msstore --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
-          winget upgrade --id 9WZDNCRD29V9 --source msstore --include-unknown --accept-source-agreements --accept-package-agreements --silent --disable-interactivity || $true
           Get-AppxPackage *MicrosoftOfficeHub* | Select-Object Name,PackageFullName,Version | Format-List
       - name: Install UI automation
         run: pip install pywinauto
