@@ -16,6 +16,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path copilot_artifacts | Out-Null
+          Set-WinHomeLocation -GeoId 244
+          Get-WinHomeLocation | Format-List | Tee-Object copilot_artifacts/home-region.txt
           Get-ComputerInfo | Select-Object WindowsProductName,WindowsVersion,OsBuildNumber | Format-List | Tee-Object copilot_artifacts/windows.txt
           if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
             Invoke-WebRequest -Uri 'https://aka.ms/getwinget' -OutFile "$env:TEMP\Microsoft.DesktopAppInstaller.msixbundle"
