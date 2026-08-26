@@ -9,7 +9,7 @@ on:
 jobs:
   native-ui:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,12 +21,12 @@ jobs:
           winget install --id 9NHT9RB2F4HD --source msstore --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
       - name: Install Windows UI automation
         run: pip install pywinauto
-      - name: Launch and inspect native Copilot
-        run: python tools/copilot_windows_ui_probe.py
-      - name: Upload native UI evidence
+      - name: Run real C1 Copilot calibration
+        run: python tools/yoshii_copilot_calibrate.py
+      - name: Upload calibration transcripts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yoshii-native-copilot-ui
-          path: native_copilot_artifacts/
+          name: yoshii-copilot-calibration
+          path: yoshii_calibration/
           if-no-files-found: warn
