@@ -1,0 +1,77 @@
+name: Yoshii Copilot App UI Probe
+
+on:
+  push:
+    branches:
+      - automation/yoshii-copilot
+  workflow_dispatch:
+
+jobs:
+  ui-probe:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Copilot app
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force copilot_ui | Out-Null
+          winget install --id 9NHT9RB2F4HD --source msstore --accept-source-agreements --accept-package-agreements --silent --disable-interactivity | Tee-Object copilot_ui/install.txt
+          Get-AppxPackage Microsoft.Copilot | Format-List Name,PackageFullName,PackageFamilyName,InstallLocation,Version | Tee-Object copilot_ui/package.txt
+      - name: Install UI automation tools
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install pywinauto pillow pyautogui
+      - name: Launch and inspect Copilot
+        shell: pwsh
+        run: |
+          @'
+          import os, time, json, subprocess, traceback
+          from pathlib import Path
+          from pywinauto import Desktop
+          from PIL import ImageGrab
+          out=Path('copilot_ui'); out.mkdir(exist_ok=True)
+          before={p.pid:p.name() for p in Desktop(backend='uia').windows() if hasattr(p,'pid')}
+          subprocess.Popen(['explorer.exe', r'shell:AppsFolder\Microsoft.Copilot_8wekyb3d8bbwe!App'])
+          time.sleep(15)
+          try:
+              ImageGrab.grab(all_screens=True).save(out/'desktop.png')
+          except Exception as e:
+              (out/'screenshot_error.txt').write_text(repr(e),encoding='utf-8')
+          data=[]
+          desktop=Desktop(backend='uia')
+          for w in desktop.windows():
+              try:
+                  title=w.window_text()
+                  cls=w.element_info.class_name
+                  pid=w.process_id()
+                  if 'copilot' in title.lower() or 'copilot' in cls.lower() or title:
+                      rec={'title':title,'class':cls,'pid':pid,'visible':w.is_visible(),'enabled':w.is_enabled()}
+                      if 'copilot' in title.lower():
+                          desc=[]
+                          try:
+                              for c in w.descendants():
+                                  try:
+                                      desc.append({'type':c.element_info.control_type,'name':c.window_text(),'class':c.element_info.class_name,'auto_id':c.element_info.automation_id,'enabled':c.is_enabled(),'visible':c.is_visible()})
+                                  except Exception as e:
+                                      pass
+                          except Exception as e:
+                              rec['desc_error']=repr(e)
+                          rec['descendants']=desc
+                      data.append(rec)
+              except Exception:
+                  pass
+          (out/'uia.json').write_text(json.dumps(data,indent=2),encoding='utf-8')
+          print(json.dumps(data,indent=2)[:50000])
+          print('PROCESSES')
+          subprocess.run(['tasklist'],check=False)
+          '@ | Set-Content -Encoding UTF8 copilot_ui_probe.py
+          python copilot_ui_probe.py
+      - name: Upload UI probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoshii-copilot-ui-probe
+          path: copilot_ui/
+          if-no-files-found: warn
