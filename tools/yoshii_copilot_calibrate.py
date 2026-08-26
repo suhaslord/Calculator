@@ -11,14 +11,27 @@ subprocess.Popen(['explorer.exe', f'shell:AppsFolder\\{APPID}'])
 time.sleep(15)
 desktop=Desktop(backend='uia')
 
-def win():
-    for w in desktop.windows():
-        try:
-            if 'copilot' in w.window_text().lower(): return w
-        except Exception: pass
+def looks_like_copilot(w):
+    try:
+        if 'copilot' in w.window_text().lower(): return True
+        if w.class_name()!='WinUIDesktopWin32WindowClass': return False
+        for c in w.descendants():
+            try:
+                if c.element_info.automation_id in ('InputTextBox','HomeButton','SkipToHomeButton','GoToHomeButton','ComposerChatModeButton'):
+                    return True
+            except Exception: pass
+    except Exception: pass
+    return False
+
+def win(retries=12):
+    for _ in range(retries):
+        for w in desktop.windows():
+            if looks_like_copilot(w): return w
+        time.sleep(1)
     return None
 
 def find(w, aid, ctype=None):
+    if w is None: return None
     for c in w.descendants():
         try:
             if c.element_info.automation_id==aid and (ctype is None or c.element_info.control_type==ctype): return c
@@ -27,6 +40,7 @@ def find(w, aid, ctype=None):
 
 def visible_texts(w):
     vals=[]
+    if w is None: return vals
     for c in w.descendants():
         try:
             if not c.is_visible(): continue
@@ -39,14 +53,13 @@ def visible_texts(w):
 
 def dump(tag):
     w=win(); vals=visible_texts(w)
-    print('\n===',tag,'===')
+    print('\n===',tag,'=== WINDOW',None if w is None else repr(w.window_text()))
     for v in vals: print(json.dumps(v,ensure_ascii=False))
     (OUT/f'{tag}.json').write_text(json.dumps(vals,indent=2,ensure_ascii=False),encoding='utf-8')
     return vals
 
 def click_onboarding():
-    w=win();
-    s=find(w,'SkipToHomeButton','Button')
+    w=win(); s=find(w,'SkipToHomeButton','Button')
     if s is not None:
         print('CLICK_SKIP'); s.click_input(); time.sleep(7)
     w=win(); g=find(w,'GoToHomeButton','Button')
@@ -65,16 +78,19 @@ def send_text(text):
     time.sleep(2)
     print('INPUT_VALUE',repr(edit.window_text()))
     keyboard.send_keys('{ENTER}')
-    time.sleep(2)
+    time.sleep(3)
 
-def wait_for_stable(tag, min_wait=8, max_wait=75):
+def wait_for_stable(tag, min_wait=8, max_wait=90):
     start=time.time(); last=None; stable=0; latest=[]
     while time.time()-start < max_wait:
         time.sleep(3)
-        w=win(); vals=visible_texts(w)
+        w=win(retries=3)
+        if w is None:
+            print('POLL',tag,'WINDOW_MISSING'); continue
+        vals=visible_texts(w)
         sig='\n'.join(v['text'] for v in vals)
         elapsed=int(time.time()-start)
-        print('POLL',tag,elapsed,'chars',len(sig))
+        print('POLL',tag,elapsed,'title',repr(w.window_text()),'chars',len(sig))
         if sig==last and elapsed>=min_wait:
             stable+=1
         else:
@@ -92,7 +108,6 @@ send_text(PROMPT1)
 first=wait_for_stable('after_turn1')
 send_text(PROMPT2)
 second=wait_for_stable('after_turn2')
-
 record={'condition':'generic','case_id':'C1','prompt1':PROMPT1,'prompt2':PROMPT2,'turn1_ui':first,'turn2_ui':second}
 (OUT/'calibration_record.json').write_text(json.dumps(record,indent=2,ensure_ascii=False),encoding='utf-8')
 print('CALIBRATION_DONE')
