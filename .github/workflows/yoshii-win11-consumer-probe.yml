@@ -36,7 +36,7 @@ jobs:
       - name: Install Windows UI automation
         run: pip install pywinauto
       - name: Run real Copilot calibration
-        run: python tools/yoshii_copilot_full.py
+        run: python tools/yoshii_copilot_win11.py
       - name: Upload raw evidence
         if: always()
         uses: actions/upload-artifact@v4
