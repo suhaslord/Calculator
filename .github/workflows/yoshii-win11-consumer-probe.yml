@@ -1,4 +1,4 @@
-name: Yoshii x64 Consumer Copilot Store Probe
+name: Yoshii x64 Copilot Store Package Inspect
 
 on:
   push:
@@ -9,10 +9,7 @@ on:
 jobs:
   probe:
     runs-on: windows-2025
-    timeout-minutes: 20
-    env:
-      CASE_ID: C2
-      CONDITION: generic
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,11 +20,8 @@ jobs:
         run: |
           $runtime = "$env:RUNNER_TEMP\WindowsAppRuntimeInstall-x64.exe"
           Invoke-WebRequest -Uri https://download.microsoft.com/download/11c5f368-18ed-4bc7-9421-a876b9923460/WindowsAppRuntimeInstall-x64.exe -OutFile $runtime
-          (Get-Item $runtime).VersionInfo | Format-List ProductVersion,FileVersion,CompanyName,FileName
           $p = Start-Process -FilePath $runtime -ArgumentList '--quiet' -PassThru -Wait
-          Write-Host "Windows App Runtime exit code: $($p.ExitCode)"
           if ($p.ExitCode -ne 0) { throw "Windows App Runtime install failed: $($p.ExitCode)" }
-          Get-AppxPackage *WindowsAppRuntime* | Select-Object Name,Version,Architecture,PackageFullName | Format-Table -AutoSize
       - name: Install official Windows App Installer
         shell: pwsh
         run: |
@@ -36,24 +30,62 @@ jobs:
           $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
           if (-not (Test-Path $winget)) { throw 'winget.exe not installed' }
           & $winget --info
-      - name: Install x64 Microsoft Copilot from Store
+      - name: Download x64 Copilot Store package without offline license
         shell: pwsh
         run: |
           $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
-          & $winget install --id 9NHT9RB2F4HD --source msstore --architecture x64 --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
-          if ($LASTEXITCODE -ne 0) { throw "Copilot Store x64 install failed: $LASTEXITCODE" }
-          $pkg = Get-AppxPackage Microsoft.Copilot
-          if (-not $pkg) { throw 'Microsoft.Copilot package missing after x64 Store install' }
-          $pkg | Select-Object Name,PackageFullName,Version,Architecture,InstallLocation | Format-List
-          if ($pkg.Version -le [version]'1.25121.84.0') { throw "STALE_COPILOT_PACKAGE_$($pkg.Version)" }
-      - name: Install Windows UI automation
-        run: pip install pywinauto
-      - name: Run real C2 Copilot calibration
-        run: python tools/yoshii_copilot_submitfix.py
-      - name: Upload raw evidence
+          $out = Join-Path $env:RUNNER_TEMP 'copilot-store-download'
+          $stdout = Join-Path $env:RUNNER_TEMP 'winget-download-out.txt'
+          $stderr = Join-Path $env:RUNNER_TEMP 'winget-download-err.txt'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $args = @(
+            'download','--id','9NHT9RB2F4HD','--exact','--source','msstore',
+            '--architecture','x64','--platform','Windows.Desktop','--skip-license',
+            '--download-directory',$out,'--accept-source-agreements','--accept-package-agreements',
+            '--disable-interactivity','--verbose-logs'
+          )
+          $p = Start-Process -FilePath $winget -ArgumentList $args -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          if (-not $p.WaitForExit(150000)) {
+            $p.Kill()
+            throw 'Copilot Store package download exceeded 150 seconds'
+          }
+          Write-Host '--- winget stdout ---'
+          if (Test-Path $stdout) { Get-Content $stdout }
+          Write-Host '--- winget stderr ---'
+          if (Test-Path $stderr) { Get-Content $stderr }
+          Write-Host "WinGet download exit code: $($p.ExitCode)"
+          Get-ChildItem $out -Recurse | Select-Object FullName,Length,LastWriteTime | Format-Table -AutoSize
+          if ($p.ExitCode -ne 0) { throw "Copilot Store package download failed: $($p.ExitCode)" }
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $inspect = Join-Path $PWD 'yoshii_store_inspect'
+          New-Item -ItemType Directory -Force -Path $inspect | Out-Null
+          $summary = @()
+          foreach ($file in Get-ChildItem $out -Recurse -File | Where-Object { $_.Extension -in '.appx','.msix','.appxbundle','.msixbundle' }) {
+            $item = [ordered]@{ file=$file.Name; length=$file.Length; manifests=@() }
+            try {
+              $zip = [System.IO.Compression.ZipFile]::OpenRead($file.FullName)
+              foreach ($entry in $zip.Entries | Where-Object { $_.FullName -match '(AppxManifest|AppxBundleManifest)\.xml$' }) {
+                $reader = New-Object System.IO.StreamReader($entry.Open())
+                $text = $reader.ReadToEnd()
+                $reader.Dispose()
+                $name = ($file.BaseName + '_' + ($entry.FullName -replace '[\\/]','_'))
+                Set-Content -Path (Join-Path $inspect $name) -Value $text -Encoding utf8
+                $item.manifests += $entry.FullName
+                Write-Host "MANIFEST $($file.Name) :: $($entry.FullName)"
+                Write-Host $text
+              }
+              $zip.Dispose()
+            } catch {
+              Write-Host "INSPECT_ERROR $($file.Name): $($_.Exception.Message)"
+            }
+            $summary += [pscustomobject]$item
+          }
+          $summary | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $inspect 'summary.json') -Encoding utf8
+      - name: Upload package inspection
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yoshii-x64-store-C2-generic
-          path: yoshii_result/
+          name: yoshii-x64-store-package-inspect
+          path: yoshii_store_inspect/
           if-no-files-found: warn
