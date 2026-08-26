@@ -9,22 +9,37 @@ on:
 jobs:
   probe:
     runs-on: windows-11-arm
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Show Microsoft Edge version
+      - name: Install Windows App Installer
         shell: pwsh
         run: |
-          $paths = @(
-            "$env:ProgramFiles(x86)\Microsoft\Edge\Application\msedge.exe",
-            "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
+          Invoke-WebRequest -Uri https://aka.ms/getwinget -OutFile $env:RUNNER_TEMP\winget.msixbundle
+          Add-AppxPackage -Path $env:RUNNER_TEMP\winget.msixbundle
+          $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
+          if (-not (Test-Path $winget)) { throw 'winget.exe not installed' }
+          & $winget --info
+      - name: Install current Microsoft Edge
+        shell: pwsh
+        run: |
+          $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
+          & $winget show --id Microsoft.Edge -e --source winget --accept-source-agreements
+          & $winget install --id Microsoft.Edge -e --source winget --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw "Microsoft Edge install failed: $LASTEXITCODE" }
+          $roots = @(
+            "$env:ProgramFiles\Microsoft\Edge\Application",
+            "${env:ProgramFiles(x86)}\Microsoft\Edge\Application",
+            "$env:LOCALAPPDATA\Microsoft\Edge\Application"
           )
-          $edge = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $edge) { throw 'Microsoft Edge not found' }
-          & $edge --version
+          $edge = $roots | ForEach-Object { if (Test-Path $_) { Get-ChildItem $_ -Filter msedge.exe -Recurse -ErrorAction SilentlyContinue } } | Select-Object -First 1
+          if (-not $edge) { throw 'Microsoft Edge executable missing after install' }
+          Write-Host "EDGE_PATH=$($edge.FullName)"
+          "EDGE_PATH=$($edge.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          (Get-Item $edge.FullName).VersionInfo | Format-List ProductVersion,FileVersion,FileName
       - name: Install browser controller
         run: pip install playwright
       - name: Probe signed-out Copilot in headed Edge
