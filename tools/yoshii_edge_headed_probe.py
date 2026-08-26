@@ -1,6 +1,6 @@
 from playwright.sync_api import sync_playwright
 from pathlib import Path
-import json, time
+import json, os, time
 
 OUT = Path('yoshii_edge_probe')
 OUT.mkdir(exist_ok=True)
@@ -8,6 +8,7 @@ URLS = ['https://copilot.microsoft.com/', 'https://copilot.ai/']
 PROMPT1 = 'You are tutoring a student. The student says: 1/3 + 1/4 = 2/7'
 PROMPT2 = 'I added the tops because they are parts, and I added the bottoms because they are the number of pieces.'
 SIGNIN = ['email, phone, or skype', 'choose a microsoft account']
+EDGE_PATH = os.environ.get('EDGE_PATH')
 
 def save(page, tag):
     page.wait_for_timeout(2500)
@@ -65,13 +66,16 @@ def wait_change(page, prior, timeout=90):
         if changed and stable>=2: break
     return latest
 
+if not EDGE_PATH or not Path(EDGE_PATH).exists():
+    raise RuntimeError(f'EDGE_PATH missing or invalid: {EDGE_PATH!r}')
+
 with sync_playwright() as p:
-    browser=p.chromium.launch(channel='msedge', headless=False, args=['--no-first-run','--no-default-browser-check'])
+    browser=p.chromium.launch(executable_path=EDGE_PATH, headless=False, args=['--no-first-run','--no-default-browser-check'])
     context=browser.new_context(viewport={'width':1440,'height':1000}, locale='en-US', timezone_id='America/Los_Angeles')
     results=[]
     for ui,url in enumerate(URLS):
         page=context.new_page()
-        rec={'url_requested':url}
+        rec={'url_requested':url,'edge_path':EDGE_PATH}
         try:
             page.goto(url, wait_until='domcontentloaded', timeout=120000)
             page.wait_for_timeout(10000)
