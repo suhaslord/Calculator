@@ -1,4 +1,4 @@
-name: Yoshii x64 Copilot Store Package Inspect
+name: Yoshii x64 Unified Copilot Direct Probe
 
 on:
   push:
@@ -9,83 +9,51 @@ on:
 jobs:
   probe:
     runs-on: windows-2025
-    timeout-minutes: 12
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install Microsoft Windows App Runtime 1.8
+      - name: Download official Microsoft Copilot desktop installer
         shell: pwsh
         run: |
-          $runtime = "$env:RUNNER_TEMP\WindowsAppRuntimeInstall-x64.exe"
-          Invoke-WebRequest -Uri https://download.microsoft.com/download/11c5f368-18ed-4bc7-9421-a876b9923460/WindowsAppRuntimeInstall-x64.exe -OutFile $runtime
-          $p = Start-Process -FilePath $runtime -ArgumentList '--quiet' -PassThru -Wait
-          if ($p.ExitCode -ne 0) { throw "Windows App Runtime install failed: $($p.ExitCode)" }
-      - name: Install official Windows App Installer
+          $installer = "$env:RUNNER_TEMP\M365CopilotDesktopInstaller.exe"
+          Invoke-WebRequest -Uri https://res.cdn.office.net/s01-officehomewindows/5mttl/prod/M365CopilotDesktopInstaller.exe -OutFile $installer
+          Get-Item $installer | Select-Object Name,Length | Format-List
+          (Get-Item $installer).VersionInfo | Format-List FileVersion,ProductVersion,CompanyName,FileDescription,FileName
+      - name: Install unified Microsoft Copilot from CDN
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri https://aka.ms/getwinget -OutFile $env:RUNNER_TEMP\winget.msixbundle
-          Add-AppxPackage -Path $env:RUNNER_TEMP\winget.msixbundle
-          $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
-          if (-not (Test-Path $winget)) { throw 'winget.exe not installed' }
-          & $winget --info
-      - name: Download x64 Copilot Store package without offline license
-        shell: pwsh
-        run: |
-          $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
-          $out = Join-Path $env:RUNNER_TEMP 'copilot-store-download'
-          $stdout = Join-Path $env:RUNNER_TEMP 'winget-download-out.txt'
-          $stderr = Join-Path $env:RUNNER_TEMP 'winget-download-err.txt'
-          New-Item -ItemType Directory -Force -Path $out | Out-Null
-          $args = @(
-            'download','--id','9NHT9RB2F4HD','--exact','--source','msstore',
-            '--architecture','x64','--platform','Windows.Desktop','--skip-license',
-            '--download-directory',$out,'--accept-source-agreements','--accept-package-agreements',
-            '--disable-interactivity','--verbose-logs'
-          )
-          $p = Start-Process -FilePath $winget -ArgumentList $args -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
-          if (-not $p.WaitForExit(150000)) {
-            $p.Kill()
-            throw 'Copilot Store package download exceeded 150 seconds'
+          $installer = "$env:RUNNER_TEMP\M365CopilotDesktopInstaller.exe"
+          $stdout = "$env:RUNNER_TEMP\copilot-installer-out.txt"
+          $stderr = "$env:RUNNER_TEMP\copilot-installer-err.txt"
+          $p = Start-Process -FilePath $installer -ArgumentList '--quiet','--start','-p' -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          if (-not $p.WaitForExit(240000)) {
+            try { $p.Kill() } catch {}
+            throw 'Unified Copilot installer exceeded 240 seconds'
           }
-          Write-Host '--- winget stdout ---'
-          if (Test-Path $stdout) { Get-Content $stdout }
-          Write-Host '--- winget stderr ---'
-          if (Test-Path $stderr) { Get-Content $stderr }
-          Write-Host "WinGet download exit code: $($p.ExitCode)"
-          Get-ChildItem $out -Recurse | Select-Object FullName,Length,LastWriteTime | Format-Table -AutoSize
-          if ($p.ExitCode -ne 0) { throw "Copilot Store package download failed: $($p.ExitCode)" }
-
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $inspect = Join-Path $PWD 'yoshii_store_inspect'
-          New-Item -ItemType Directory -Force -Path $inspect | Out-Null
-          $summary = @()
-          foreach ($file in Get-ChildItem $out -Recurse -File | Where-Object { $_.Extension -in '.appx','.msix','.appxbundle','.msixbundle' }) {
-            $item = [ordered]@{ file=$file.Name; length=$file.Length; manifests=@() }
-            try {
-              $zip = [System.IO.Compression.ZipFile]::OpenRead($file.FullName)
-              foreach ($entry in $zip.Entries | Where-Object { $_.FullName -match '(AppxManifest|AppxBundleManifest)\.xml$' }) {
-                $reader = New-Object System.IO.StreamReader($entry.Open())
-                $text = $reader.ReadToEnd()
-                $reader.Dispose()
-                $name = ($file.BaseName + '_' + ($entry.FullName -replace '[\\/]','_'))
-                Set-Content -Path (Join-Path $inspect $name) -Value $text -Encoding utf8
-                $item.manifests += $entry.FullName
-                Write-Host "MANIFEST $($file.Name) :: $($entry.FullName)"
-                Write-Host $text
-              }
-              $zip.Dispose()
-            } catch {
-              Write-Host "INSPECT_ERROR $($file.Name): $($_.Exception.Message)"
-            }
-            $summary += [pscustomobject]$item
-          }
-          $summary | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $inspect 'summary.json') -Encoding utf8
-      - name: Upload package inspection
+          Write-Host "Installer exit code: $($p.ExitCode)"
+          if (Test-Path $stdout) { Write-Host '--- installer stdout ---'; Get-Content $stdout }
+          if (Test-Path $stderr) { Write-Host '--- installer stderr ---'; Get-Content $stderr }
+          Start-Sleep -Seconds 12
+          Write-Host '--- Copilot / Microsoft 365 AppX packages ---'
+          Get-AppxPackage | Where-Object { $_.Name -match 'Copilot|OfficeHub|MicrosoftOffice' } | Select-Object Name,PackageFullName,Version,Architecture,InstallLocation | Format-List
+          Write-Host '--- Copilot / Microsoft 365 Start apps ---'
+          Get-StartApps | Where-Object { $_.Name -match 'Copilot|Microsoft 365|Office' } | Select-Object Name,AppID | Format-Table -AutoSize
+          Write-Host '--- matching installed programs ---'
+          Get-ChildItem 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall','HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue } | Where-Object { $_.DisplayName -match 'Copilot|Microsoft 365' } | Select-Object DisplayName,DisplayVersion,InstallLocation,Publisher | Format-Table -AutoSize
+          if ($p.ExitCode -ne 0) { throw "Unified Copilot installer failed: $($p.ExitCode)" }
+          $apps = Get-StartApps | Where-Object { $_.Name -match 'Copilot|Microsoft 365|Office' }
+          if (-not $apps) { throw 'Installer returned success but no Copilot/Microsoft 365 Start app was registered' }
+      - name: Install Windows UI automation
+        run: pip install pywinauto
+      - name: Probe unified Copilot UI with real C2 two-turn calibration
+        run: python tools/yoshii_unified_win11_probe.py
+      - name: Upload raw evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yoshii-x64-store-package-inspect
-          path: yoshii_store_inspect/
+          name: yoshii-x64-unified-C2-probe
+          path: yoshii_unified_result/
           if-no-files-found: warn
