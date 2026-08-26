@@ -1,4 +1,4 @@
-name: Yoshii Headed Edge Copilot Probe
+name: Yoshii Headed Copilot x64 Probe
 
 on:
   push:
@@ -8,75 +8,24 @@ on:
 
 jobs:
   probe:
-    runs-on: windows-11-arm
-    timeout-minutes: 18
+    runs-on: windows-2025
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install Windows App Installer
+      - name: Install headed browser controller
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri https://aka.ms/getwinget -OutFile $env:RUNNER_TEMP\winget.msixbundle
-          Add-AppxPackage -Path $env:RUNNER_TEMP\winget.msixbundle
-          $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
-          if (-not (Test-Path $winget)) { throw 'winget.exe not installed' }
-          & $winget --info
-      - name: Replace stale Edge with current Microsoft Edge
-        shell: pwsh
-        run: |
-          $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
-          $download = Join-Path $env:RUNNER_TEMP 'edge-download'
-          New-Item -ItemType Directory -Force -Path $download | Out-Null
-
-          & $winget list --id Microsoft.Edge -e
-          & $winget uninstall --id Microsoft.Edge -e --silent --disable-interactivity
-          Write-Host "Uninstall exit code: $LASTEXITCODE"
-          Start-Sleep -Seconds 3
-
-          & $winget download --id Microsoft.Edge -e --source winget --architecture arm64 --download-directory $download --accept-source-agreements --accept-package-agreements --disable-interactivity
-          if ($LASTEXITCODE -ne 0) { throw "Microsoft Edge download failed: $LASTEXITCODE" }
-          $msi = Get-ChildItem $download -Filter *.msi -Recurse | Select-Object -First 1
-          if (-not $msi) { throw 'Downloaded Edge MSI not found' }
-          Write-Host "EDGE_MSI=$($msi.FullName)"
-
-          $p = Start-Process msiexec.exe -ArgumentList '/i',"`"$($msi.FullName)`"",'/qn','/norestart' -PassThru -Wait
-          Write-Host "MSI install exit code: $($p.ExitCode)"
-          if ($p.ExitCode -ne 0) { throw "Edge MSI install failed: $($p.ExitCode)" }
-          Start-Sleep -Seconds 5
-
-          $roots = @(
-            "$env:ProgramFiles\Microsoft\Edge\Application",
-            "${env:ProgramFiles(x86)}\Microsoft\Edge\Application",
-            "$env:LOCALAPPDATA\Microsoft\Edge\Application"
-          )
-          $edge = $roots | ForEach-Object { if (Test-Path $_) { Get-ChildItem $_ -Filter msedge.exe -Recurse -ErrorAction SilentlyContinue } } | Select-Object -First 1
-          if (-not $edge) {
-            $regPaths = @(
-              'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe',
-              'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe',
-              'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe'
-            )
-            foreach ($rp in $regPaths) {
-              if (Test-Path $rp) {
-                $candidate = (Get-ItemProperty $rp).'(default)'
-                if ($candidate -and (Test-Path $candidate)) { $edge = Get-Item $candidate; break }
-              }
-            }
-          }
-          if (-not $edge) { throw 'Microsoft Edge executable missing after clean MSI install' }
-          Write-Host "EDGE_PATH=$($edge.FullName)"
-          "EDGE_PATH=$($edge.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          (Get-Item $edge.FullName).VersionInfo | Format-List ProductVersion,FileVersion,FileName
-      - name: Install browser controller
-        run: pip install playwright
-      - name: Probe signed-out Copilot in headed Edge
+          pip install playwright
+          python -m playwright install chromium
+      - name: Probe signed-out Copilot in headed Chromium
         run: python tools/yoshii_edge_headed_probe.py
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yoshii-headed-edge-C2-probe
+          name: yoshii-headed-x64-C2-probe
           path: yoshii_edge_probe/
           if-no-files-found: warn
