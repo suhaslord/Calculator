@@ -1,0 +1,32 @@
+name: Yoshii Native Copilot UI Probe
+
+on:
+  push:
+    branches:
+      - automation/yoshii-copilot
+  workflow_dispatch:
+
+jobs:
+  native-ui:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install official consumer Copilot app
+        shell: pwsh
+        run: |
+          winget install --id 9NHT9RB2F4HD --source msstore --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
+      - name: Install Windows UI automation
+        run: pip install pywinauto
+      - name: Launch and inspect native Copilot
+        run: python tools/copilot_windows_ui_probe.py
+      - name: Upload native UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoshii-native-copilot-ui
+          path: native_copilot_artifacts/
+          if-no-files-found: warn
