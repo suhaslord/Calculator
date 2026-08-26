@@ -1,4 +1,4 @@
-name: Yoshii Unified Copilot Direct Installer Probe
+name: Yoshii Headed Edge Copilot Probe
 
 on:
   push:
@@ -15,28 +15,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Download official Microsoft Copilot desktop installer
+      - name: Show Microsoft Edge version
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri https://res.cdn.office.net/s01-officehomewindows/5mttl/prod/M365CopilotDesktopInstaller.exe -OutFile $env:RUNNER_TEMP\M365CopilotDesktopInstaller.exe
-          Get-Item $env:RUNNER_TEMP\M365CopilotDesktopInstaller.exe | Select-Object Name,Length,VersionInfo | Format-List
-      - name: Install unified Microsoft Copilot
-        shell: pwsh
-        run: |
-          $p = Start-Process -FilePath $env:RUNNER_TEMP\M365CopilotDesktopInstaller.exe -ArgumentList '--quiet','--start','-p' -PassThru -Wait
-          Write-Host "Installer exit code: $($p.ExitCode)"
-          if ($p.ExitCode -ne 0) { throw "Unified Copilot installer failed: $($p.ExitCode)" }
-          Start-Sleep -Seconds 10
-          Get-AppxPackage *OfficeHub* | Select-Object Name,PackageFullName,Version,Architecture | Format-List
-          Get-AppxPackage *Copilot* | Select-Object Name,PackageFullName,Version,Architecture | Format-List
-      - name: Install Windows UI automation
-        run: pip install pywinauto
-      - name: Probe unified Copilot UI
-        run: python tools/yoshii_unified_win11_probe.py
-      - name: Upload raw evidence
+          $paths = @(
+            "$env:ProgramFiles(x86)\Microsoft\Edge\Application\msedge.exe",
+            "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
+          )
+          $edge = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $edge) { throw 'Microsoft Edge not found' }
+          & $edge --version
+      - name: Install browser controller
+        run: pip install playwright
+      - name: Probe signed-out Copilot in headed Edge
+        run: python tools/yoshii_edge_headed_probe.py
+      - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yoshii-unified-direct-C2-probe
-          path: yoshii_unified_result/
+          name: yoshii-headed-edge-C2-probe
+          path: yoshii_edge_probe/
           if-no-files-found: warn
