@@ -1,6 +1,6 @@
 import json, subprocess, time
 from pathlib import Path
-from pywinauto import Desktop, keyboard
+from pywinauto import Desktop, keyboard, mouse
 from PIL import ImageGrab
 
 OUT = Path('yoshii_unified_probe')
@@ -96,17 +96,19 @@ if edit:
     record['after']=snapshot('after_prompt')
 else:
     record['before']=before
-    # capture a keyboard-navigation trace for the embedded browser surface
+    # Normal UI path only: click the visible "Create or Sign in with a different account" button.
+    # No credentials are entered. We only inspect whether Microsoft offers a guest/continue path afterward.
     w = candidate_windows()[0] if candidate_windows() else None
     if w is not None:
         try:
             w.set_focus()
         except Exception:
             pass
-        for i in range(12):
-            keyboard.send_keys('{TAB}')
-            time.sleep(0.3)
-        shot('after_tabs')
+        mouse.click(button='left', coords=(512, 445))
+        print('CLICK_ACCOUNT_ENTRY')
+        time.sleep(15)
+        shot('after_account_click')
+        record['after_account_click']=snapshot('after_account_click')
 
 (OUT/'record.json').write_text(json.dumps(record,indent=2,ensure_ascii=False),encoding='utf-8')
 print('DONE',json.dumps({'input_found':bool(edit)}))
