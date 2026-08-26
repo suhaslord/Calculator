@@ -1,4 +1,4 @@
-name: Yoshii Windows 11 Consumer Copilot Probe
+name: Yoshii Unified Copilot Direct Installer Probe
 
 on:
   push:
@@ -10,40 +10,33 @@ jobs:
   probe:
     runs-on: windows-11-arm
     timeout-minutes: 12
-    env:
-      CASE_ID: C2
-      CONDITION: generic
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install official Windows App Installer
+      - name: Download official Microsoft Copilot desktop installer
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri https://aka.ms/getwinget -OutFile $env:RUNNER_TEMP\winget.msixbundle
-          Add-AppxPackage -Path $env:RUNNER_TEMP\winget.msixbundle
-          $winget = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe" -ErrorAction SilentlyContinue
-          if (-not $winget) { throw 'winget.exe not installed' }
-          & $winget.FullName --info
-      - name: Install standalone consumer Microsoft Copilot
+          Invoke-WebRequest -Uri https://res.cdn.office.net/s01-officehomewindows/5mttl/prod/M365CopilotDesktopInstaller.exe -OutFile $env:RUNNER_TEMP\M365CopilotDesktopInstaller.exe
+          Get-Item $env:RUNNER_TEMP\M365CopilotDesktopInstaller.exe | Select-Object Name,Length,VersionInfo | Format-List
+      - name: Install unified Microsoft Copilot
         shell: pwsh
         run: |
-          $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
-          & $winget install --id 9NHT9RB2F4HD --source msstore --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
-          if ($LASTEXITCODE -ne 0) { throw "Copilot Store install failed: $LASTEXITCODE" }
-          $pkg = Get-AppxPackage Microsoft.Copilot
-          $pkg | Select-Object Name,PackageFullName,Version,Architecture | Format-List
-          if (-not $pkg) { throw 'Microsoft.Copilot package missing after install' }
-          if ($pkg.Version -eq [version]'1.25121.84.0') { throw 'STALE_COPILOT_PACKAGE_1.25121.84.0' }
+          $p = Start-Process -FilePath $env:RUNNER_TEMP\M365CopilotDesktopInstaller.exe -ArgumentList '--quiet','--start','-p' -PassThru -Wait
+          Write-Host "Installer exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { throw "Unified Copilot installer failed: $($p.ExitCode)" }
+          Start-Sleep -Seconds 10
+          Get-AppxPackage *OfficeHub* | Select-Object Name,PackageFullName,Version,Architecture | Format-List
+          Get-AppxPackage *Copilot* | Select-Object Name,PackageFullName,Version,Architecture | Format-List
       - name: Install Windows UI automation
         run: pip install pywinauto
-      - name: Run real Copilot calibration
-        run: python tools/yoshii_copilot_submitfix.py
+      - name: Probe unified Copilot UI
+        run: python tools/yoshii_unified_win11_probe.py
       - name: Upload raw evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yoshii-win11-arm-newer-C2-generic
-          path: yoshii_result/
+          name: yoshii-unified-direct-C2-probe
+          path: yoshii_unified_result/
           if-no-files-found: warn
