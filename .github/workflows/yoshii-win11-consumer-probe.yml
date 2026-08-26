@@ -23,20 +23,24 @@ jobs:
           $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
           if (-not (Test-Path $winget)) { throw 'winget.exe not installed' }
           & $winget --info
-      - name: Install current Microsoft Edge
+      - name: Download and extract current Microsoft Edge
         shell: pwsh
         run: |
           $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
+          $download = Join-Path $env:RUNNER_TEMP 'edge-download'
+          $extract = Join-Path $env:RUNNER_TEMP 'edge-extracted'
+          New-Item -ItemType Directory -Force -Path $download,$extract | Out-Null
           & $winget show --id Microsoft.Edge -e --source winget --accept-source-agreements
-          & $winget install --id Microsoft.Edge -e --source winget --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
-          if ($LASTEXITCODE -ne 0) { throw "Microsoft Edge install failed: $LASTEXITCODE" }
-          $roots = @(
-            "$env:ProgramFiles\Microsoft\Edge\Application",
-            "${env:ProgramFiles(x86)}\Microsoft\Edge\Application",
-            "$env:LOCALAPPDATA\Microsoft\Edge\Application"
-          )
-          $edge = $roots | ForEach-Object { if (Test-Path $_) { Get-ChildItem $_ -Filter msedge.exe -Recurse -ErrorAction SilentlyContinue } } | Select-Object -First 1
-          if (-not $edge) { throw 'Microsoft Edge executable missing after install' }
+          & $winget download --id Microsoft.Edge -e --source winget --architecture arm64 --download-directory $download --accept-source-agreements --accept-package-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw "Microsoft Edge download failed: $LASTEXITCODE" }
+          $msi = Get-ChildItem $download -Filter *.msi -Recurse | Select-Object -First 1
+          if (-not $msi) { throw 'Downloaded Edge MSI not found' }
+          Write-Host "EDGE_MSI=$($msi.FullName)"
+          $p = Start-Process msiexec.exe -ArgumentList '/a',"`"$($msi.FullName)`"",'/qn',"TARGETDIR=`"$extract`"" -PassThru -Wait
+          Write-Host "MSI extraction exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { throw "Edge MSI extraction failed: $($p.ExitCode)" }
+          $edge = Get-ChildItem $extract -Filter msedge.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $edge) { throw 'Extracted Microsoft Edge executable missing' }
           Write-Host "EDGE_PATH=$($edge.FullName)"
           "EDGE_PATH=$($edge.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           (Get-Item $edge.FullName).VersionInfo | Format-List ProductVersion,FileVersion,FileName
