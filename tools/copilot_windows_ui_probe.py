@@ -19,8 +19,8 @@ def find_button(w, text=None, aid=None):
     for c in w.descendants():
         try:
             if c.element_info.control_type!='Button': continue
-            if aid and c.element_info.automation_id==aid: return c
-            if text and c.window_text().strip().lower()==text.lower(): return c
+            if aid is not None and c.element_info.automation_id==aid: return c
+            if text is not None and c.window_text().strip().lower()==text.lower(): return c
         except Exception: pass
     return None
 
@@ -37,16 +37,18 @@ def dump(tag,w):
     (OUT/f'{tag}_uia.json').write_text(json.dumps(rec,indent=2,ensure_ascii=False),encoding='utf-8')
     return rec
 
-w=copilot_window();
-if not w: raise RuntimeError('Copilot window not found')
+w=copilot_window()
+if w is None: raise RuntimeError('Copilot window not found')
 dump('onboarding',w)
-skip=find_button(w,aid='SkipToHomeButton') or find_button(w,text='Skip')
-if not skip: raise RuntimeError('Skip button not found')
+skip=find_button(w,aid='SkipToHomeButton')
+if skip is None: skip=find_button(w,text='Skip')
+if skip is None: raise RuntimeError('Skip button not found')
 print('CLICK_SKIP'); skip.click_input(); time.sleep(8)
 w=copilot_window(); mid=dump('post_skip',w)
 
-go=find_button(w,aid='GoToHomeButton') or find_button(w,text='Go to Home')
-if go:
+go=find_button(w,aid='GoToHomeButton')
+if go is None: go=find_button(w,text='Go to Home')
+if go is not None:
     print('CLICK_GO_HOME'); go.click_input(); time.sleep(12)
 else:
     print('NO_GO_HOME_BUTTON')
