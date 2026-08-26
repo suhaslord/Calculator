@@ -1,4 +1,4 @@
-name: Yoshii Copilot Direct Browser Run
+name: Yoshii Copilot Windows App Probe
 
 on:
   push:
@@ -8,24 +8,34 @@ on:
 
 jobs:
   copilot:
-    runs-on: macos-15
+    runs-on: windows-11-arm
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install Playwright
+      - name: Inspect Windows and Store tooling
+        shell: pwsh
         run: |
-          python -m pip install --upgrade pip
-          pip install playwright
-          python -m playwright install chromium
-      - name: Run Copilot diagnostic
-        run: python tools/copilot_diag.py
-      - name: Upload diagnostic artifacts
+          New-Item -ItemType Directory -Force -Path copilot_artifacts | Out-Null
+          Get-ComputerInfo | Select-Object WindowsProductName,WindowsVersion,OsBuildNumber | Format-List | Tee-Object copilot_artifacts/windows.txt
+          winget --version | Tee-Object copilot_artifacts/winget.txt
+          winget search --id 9NHT9RB2F4HD --source msstore --accept-source-agreements | Tee-Object copilot_artifacts/search.txt
+      - name: Install official Microsoft Copilot app
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          winget install --id 9NHT9RB2F4HD --source msstore --accept-source-agreements --accept-package-agreements --silent --disable-interactivity | Tee-Object copilot_artifacts/install.txt
+          Get-AppxPackage | Where-Object { $_.Name -match 'Copilot' -or $_.PackageFamilyName -match 'Copilot' } | Select-Object Name,PackageFullName,PackageFamilyName,InstallLocation | Format-List | Tee-Object copilot_artifacts/packages.txt
+      - name: Inspect launch registration
+        shell: pwsh
+        run: |
+          Get-StartApps | Where-Object { $_.Name -match 'Copilot' } | Format-List | Tee-Object copilot_artifacts/startapps.txt
+          Get-Content copilot_artifacts/install.txt -ErrorAction SilentlyContinue
+          Get-Content copilot_artifacts/packages.txt -ErrorAction SilentlyContinue
+          Get-Content copilot_artifacts/startapps.txt -ErrorAction SilentlyContinue
+      - name: Upload probe artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yoshii-copilot-diagnostic
+          name: yoshii-copilot-windows-probe
           path: copilot_artifacts/
           if-no-files-found: warn
