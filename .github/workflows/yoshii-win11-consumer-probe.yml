@@ -1,4 +1,4 @@
-name: Yoshii x64 Unified Copilot Direct Probe
+name: Yoshii Copilot Mobile Web Guest Probe
 
 on:
   push:
@@ -9,51 +9,23 @@ on:
 jobs:
   probe:
     runs-on: windows-2025
-    timeout-minutes: 18
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Download official Microsoft Copilot desktop installer
+      - name: Install headed browser controller
         shell: pwsh
         run: |
-          $installer = "$env:RUNNER_TEMP\M365CopilotDesktopInstaller.exe"
-          Invoke-WebRequest -Uri https://res.cdn.office.net/s01-officehomewindows/5mttl/prod/M365CopilotDesktopInstaller.exe -OutFile $installer
-          Get-Item $installer | Select-Object Name,Length | Format-List
-          (Get-Item $installer).VersionInfo | Format-List FileVersion,ProductVersion,CompanyName,FileDescription,FileName
-      - name: Install unified Microsoft Copilot from CDN
-        shell: pwsh
-        run: |
-          $installer = "$env:RUNNER_TEMP\M365CopilotDesktopInstaller.exe"
-          $stdout = "$env:RUNNER_TEMP\copilot-installer-out.txt"
-          $stderr = "$env:RUNNER_TEMP\copilot-installer-err.txt"
-          $p = Start-Process -FilePath $installer -ArgumentList '--quiet','--start','-p' -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
-          if (-not $p.WaitForExit(240000)) {
-            try { $p.Kill() } catch {}
-            throw 'Unified Copilot installer exceeded 240 seconds'
-          }
-          Write-Host "Installer exit code: $($p.ExitCode)"
-          if (Test-Path $stdout) { Write-Host '--- installer stdout ---'; Get-Content $stdout }
-          if (Test-Path $stderr) { Write-Host '--- installer stderr ---'; Get-Content $stderr }
-          Start-Sleep -Seconds 12
-          Write-Host '--- Copilot / Microsoft 365 AppX packages ---'
-          Get-AppxPackage | Where-Object { $_.Name -match 'Copilot|OfficeHub|MicrosoftOffice' } | Select-Object Name,PackageFullName,Version,Architecture,InstallLocation | Format-List
-          Write-Host '--- Copilot / Microsoft 365 Start apps ---'
-          Get-StartApps | Where-Object { $_.Name -match 'Copilot|Microsoft 365|Office' } | Select-Object Name,AppID | Format-Table -AutoSize
-          Write-Host '--- matching installed programs ---'
-          Get-ChildItem 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall','HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue } | Where-Object { $_.DisplayName -match 'Copilot|Microsoft 365' } | Select-Object DisplayName,DisplayVersion,InstallLocation,Publisher | Format-Table -AutoSize
-          if ($p.ExitCode -ne 0) { throw "Unified Copilot installer failed: $($p.ExitCode)" }
-          $apps = Get-StartApps | Where-Object { $_.Name -match 'Copilot|Microsoft 365|Office' }
-          if (-not $apps) { throw 'Installer returned success but no Copilot/Microsoft 365 Start app was registered' }
-      - name: Install Windows UI automation
-        run: pip install pywinauto
-      - name: Probe unified Copilot UI with real C2 two-turn calibration
-        run: python tools/yoshii_unified_win11_probe.py
+          pip install playwright
+          python -m playwright install chromium
+      - name: Probe supported mobile-web Copilot guest access
+        run: python tools/yoshii_mobile_web_probe.py
       - name: Upload raw evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yoshii-x64-unified-C2-probe
-          path: yoshii_unified_result/
+          name: yoshii-mobile-web-C2-probe
+          path: yoshii_mobile_web_result/
           if-no-files-found: warn
